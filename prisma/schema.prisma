@@ -1,0 +1,155 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum untuk role user
+enum UserRole {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+// Enum untuk status konsultasi
+enum ConsultationStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// Enum untuk status pembayaran
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+// Enum untuk tipe pesan
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VOICE
+}
+
+// Model User - untuk pasien, dokter, dan admin
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  fullname  String
+  phone     String?
+  photo     String?
+  role      UserRole @default(PATIENT)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relasi jika user adalah dokter
+  doctorProfile DoctorProfile?
+
+  // Relasi jika user adalah pasien
+  patientConsultations Consultation[] @relation("PatientConsultations")
+  
+  // Relasi jika user adalah dokter yang menangani konsultasi
+  doctorConsultations  Consultation[] @relation("DoctorConsultations")
+  
+  // Relasi pesan yang dikirim user
+  sentMessages Message[]
+  
+  // Relasi pembayaran
+  payments Payment[]
+
+  @@map("users")
+}
+
+// Model profil dokter
+model DoctorProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  specialization   String    // Spesialisasi dokter
+  licenseNumber    String    @unique // Nomor izin praktik
+  experience       Int       // Tahun pengalaman
+  education        String    // Pendidikan
+  consultationFee  Decimal   @db.Decimal(10,2) // Biaya konsultasi
+  isAvailable      Boolean   @default(true)
+  bio              String?   // Biodata singkat
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("doctor_profiles")
+}
+
+// Model konsultasi
+model Consultation {
+  id          String            @id @default(cuid())
+  patientId   String
+  doctorId    String
+  title       String            // Judul konsultasi
+  description String            // Deskripsi keluhan
+  status      ConsultationStatus @default(PENDING)
+  startTime   DateTime?         // Waktu mulai konsultasi
+  endTime     DateTime?         // Waktu selesai konsultasi
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  
+  // Relasi
+  patient User @relation("PatientConsultations", fields: [patientId], references: [id])
+  doctor  User @relation("DoctorConsultations", fields: [doctorId], references: [id])
+  
+  // Relasi dengan pesan dan pembayaran
+  messages Message[]
+  payment  Payment?
+  
+  @@map("consultations")
+}
+
+// Model pesan chat
+model Message {
+  id             String      @id @default(cuid())
+  consultationId String
+  senderId       String
+  content        String      // Isi pesan
+  messageType    MessageType @default(TEXT)
+  fileUrl        String?     // URL file jika ada
+  fileName       String?     // Nama file jika ada
+  isRead         Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  
+  // Relasi
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id])
+  
+  @@map("messages")
+}
+
+// Model pembayaran
+model Payment {
+  id                String        @id @default(cuid())
+  consultationId    String        @unique
+  userId            String
+  amount            Decimal       @db.Decimal(10,2)
+  status            PaymentStatus @default(PENDING)
+  paymentMethod     String?       // Metode pembayaran dari Midtrans
+  transactionId     String?       @unique // ID transaksi dari Midtrans
+  midtransOrderId   String?       @unique // Order ID untuk Midtrans
+  midtransResponse  Json?         // Response dari Midtrans
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relasi
+  consultation Consultation @relation(fields: [consultationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  
+  @@map("payments")
+}
