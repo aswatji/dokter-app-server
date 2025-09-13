@@ -152,6 +152,7 @@ process.on("SIGINT", () => {
   });
 });
 
+const prisma = require("./config/database");
 server.listen(PORT, "0.0.0.0", () => {
   const networkIP = process.env.NETWORK_IP || "192.168.8.194";
   console.log(`🚀 Server berhasil running di port ${PORT}`);
@@ -161,3 +162,20 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`⚡ Socket.IO: Enabled`);
   console.log(`🌐 Network IP: ${networkIP}`);
 });
+
+// Tutup koneksi Prisma saat shutdown
+const gracefulShutdown = async () => {
+  console.log("Shutting down gracefully...");
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log("Prisma disconnected");
+    } catch (e) {
+      console.error("Error disconnecting Prisma:", e);
+    }
+    process.exit(0);
+  });
+};
+
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
